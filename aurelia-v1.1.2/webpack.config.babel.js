@@ -1,118 +1,115 @@
-/**
- * To learn more about how to use Easy Webpack
- * Take a look at the README here: https://github.com/easy-webpack/core
- **/
-import { generateConfig, get, stripMetadata, EasyWebpackConfig } from '@easy-webpack/core'
-import path from 'path'
+const path = require('path')
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
+const ExtractTextPlugin = require('extract-text-webpack-plugin');
+const { AureliaPlugin } = require('aurelia-webpack-plugin');
+const { optimize: { CommonsChunkPlugin }, ProvidePlugin } = require('webpack')
 
-import envProd from '@easy-webpack/config-env-production'
-import envDev from '@easy-webpack/config-env-development'
-import aurelia from '@easy-webpack/config-aurelia'
-import babel from '@easy-webpack/config-babel'
-import html from '@easy-webpack/config-html'
-import css from '@easy-webpack/config-css'
-import fontAndImages from '@easy-webpack/config-fonts-and-images'
-import globalJquery from '@easy-webpack/config-global-jquery'
-import globalRegenerator from '@easy-webpack/config-global-regenerator'
-import generateIndexHtml from '@easy-webpack/config-generate-index-html'
-import commonChunksOptimize from '@easy-webpack/config-common-chunks-simple'
-import copyFiles from '@easy-webpack/config-copy-files'
-import uglify from '@easy-webpack/config-uglify'
-import generateCoverage from '@easy-webpack/config-test-coverage-istanbul'
+// config helpers:
+const ensureArray = (config) => config && (Array.isArray(config) ? config : [config]) || []
+const when = (condition, config, negativeConfig) =>
+  condition ? ensureArray(config) : ensureArray(negativeConfig)
 
-process.env.BABEL_ENV = 'webpack'
-const ENV = process.env.NODE_ENV && process.env.NODE_ENV.toLowerCase() || (process.env.NODE_ENV = 'development')
+// primary config:
+const title = 'Aurelia Navigation Skeleton';
+const outDir = path.resolve(__dirname, 'dist');
+const srcDir = path.resolve(__dirname, 'src');
+const nodeModulesDir = path.resolve(__dirname, 'node_modules');
+const baseUrl = '/';
 
-// basic configuration:
-const title = 'Aurelia Navigation Skeleton'
-const baseUrl = '/'
-const rootDir = path.resolve()
-const srcDir = path.resolve('src')
-const outDir = path.resolve('dist')
-
-const coreBundles = {
-  bootstrap: [
-    'aurelia-bootstrapper-webpack',
-    'aurelia-polyfills',
-    'aurelia-pal',
-    'aurelia-pal-browser',
-    'regenerator-runtime'
-  ],
-  // these will be included in the 'aurelia' bundle (except for the above bootstrap packages)
-  aurelia: [
-    'aurelia-bootstrapper-webpack',
-    'aurelia-binding',
-    'aurelia-dependency-injection',
-    'aurelia-event-aggregator',
-    'aurelia-framework',
-    'aurelia-history',
-    'aurelia-history-browser',
-    'aurelia-loader',
-    'aurelia-loader-webpack',
-    'aurelia-logging',
-    'aurelia-logging-console',
-    'aurelia-metadata',
-    'aurelia-pal',
-    'aurelia-pal-browser',
-    'aurelia-path',
-    'aurelia-polyfills',
-    'aurelia-route-recognizer',
-    'aurelia-router',
-    'aurelia-task-queue',
-    'aurelia-templating',
-    'aurelia-templating-binding',
-    'aurelia-templating-router',
-    'aurelia-templating-resources'
-  ]
-}
-
-/**
- * Main Webpack Configuration
- */
-let config = generateConfig(
+const cssRules = [
+  { loader: 'css-loader' },
   {
-    entry: {
-      'app': ['./src/main' /* this is filled by the aurelia-webpack-plugin */],
-      'aurelia-bootstrap': coreBundles.bootstrap,
-      'aurelia': coreBundles.aurelia.filter(pkg => coreBundles.bootstrap.indexOf(pkg) === -1)
-    },
-    output: {
-      path: outDir
-    }
+    loader: 'postcss-loader',
+    options: { plugins: () => [require('autoprefixer')({ browsers: ['last 2 versions'] })]}
+  }
+]
+
+module.exports = ({production, server, extractCss, coverage} = {}) => ({
+  resolve: {
+    extensions: ['.js'],
+    modules: [srcDir, 'node_modules'],
   },
-
-  /**
-   * Don't be afraid, you can put bits of standard Webpack configuration here
-   * (or at the end, after the last parameter, so it won't get overwritten by the presets)
-   * Because that's all easy-webpack configs are - snippets of premade, maintained configuration parts!
-   *
-   * For Webpack docs, see: https://webpack.js.org/configuration/
-   */
-
-  ENV === 'test' || ENV === 'development' ?
-    envDev(ENV !== 'test' ? {} : {devtool: 'inline-source-map'}) :
-    envProd({ /* devtool: '...' */ }),
-
-  aurelia({root: rootDir, src: srcDir, title: title, baseUrl: baseUrl}),
-
-  babel(),
-  html(),
-  css({ filename: 'styles.css', allChunks: true, sourceMap: false }),
-  fontAndImages(),
-  globalJquery(),
-  globalRegenerator(),
-  generateIndexHtml({minify: ENV === 'production'}),
-
-  ...(ENV === 'production' || ENV === 'development' ? [
-    commonChunksOptimize({appChunkName: 'app', firstChunk: 'aurelia-bootstrap'}),
-    copyFiles({patterns: [{ from: 'favicon.ico', to: 'favicon.ico' }]})
-  ] : [
-    /* ENV === 'test' */
-    generateCoverage({ options: { 'force-sourcemap': true, esModules: true }})
-  ]),
-
-  ENV === 'production' ?
-    uglify({debug: false, mangle: { except: ['cb', '__webpack_require__'] }}) : {}
-)
-
-module.exports = stripMetadata(config)
+  entry: {
+    app: ['aurelia-bootstrapper'],
+    vendor: ['bluebird', 'jquery', 'bootstrap'],
+  },
+  output: {
+    path: outDir,
+    publicPath: baseUrl,
+    filename: production ? '[name].[chunkhash].bundle.js' : '[name].[hash].bundle.js',
+    sourceMapFilename: production ? '[name].[chunkhash].bundle.map' : '[name].[hash].bundle.map',
+    chunkFilename: production ? '[name].[chunkhash].chunk.js' : '[name].[hash].chunk.js',
+  },
+  devServer: {
+    contentBase: outDir,
+    // serve index.html for all 404 (required for push-state)
+    historyApiFallback: true,
+  },
+  module: {
+    rules: [
+      // CSS required in JS/TS files should use the style-loader that auto-injects it into the website
+      // only when the issuer is a .js/.ts file, so the loaders are not applied inside html templates
+      {
+        test: /\.css$/i,
+        issuer: [{ not: [{ test: /\.html$/i }] }],
+        use: extractCss ? ExtractTextPlugin.extract({
+          fallback: 'style-loader',
+          use: cssRules,
+        }) : ['style-loader', ...cssRules],
+      },
+      {
+        test: /\.css$/i,
+        issuer: [{ test: /\.html$/i }],
+        // CSS required in templates cannot be extracted safely
+        // because Aurelia would try to require it again in runtime
+        use: cssRules,
+      },
+      { test: /\.html$/i, loader: 'html-loader' },
+      { test: /\.js$/i, loader: 'babel-loader', exclude: nodeModulesDir,
+        options: coverage ? { sourceMap: 'inline', plugins: [ 'istanbul' ] } : {},
+      },
+      { test: /\.json$/i, loader: 'json-loader' },
+      // use Bluebird as the global Promise implementation:
+      { test: /[\/\\]node_modules[\/\\]bluebird[\/\\].+\.js$/, loader: 'expose-loader?Promise' },
+      // exposes jQuery globally as $ and as jQuery:
+      { test: require.resolve('jquery'), loader: 'expose-loader?$!expose-loader?jQuery' },
+      // embed small images and fonts as Data Urls and larger ones as files:
+      { test: /\.(png|gif|jpg|cur)$/i, loader: 'url-loader', options: { limit: 8192 } },
+      { test: /\.woff2(\?v=[0-9]\.[0-9]\.[0-9])?$/i, loader: 'url-loader', options: { limit: 10000, mimetype: 'application/font-woff2' } },
+      { test: /\.woff(\?v=[0-9]\.[0-9]\.[0-9])?$/i, loader: 'url-loader', options: { limit: 10000, mimetype: 'application/font-woff' } },
+      // load these fonts normally, as files:
+      { test: /\.(ttf|eot|svg|otf)(\?v=[0-9]\.[0-9]\.[0-9])?$/i, loader: 'file-loader' },
+    ]
+  },
+  plugins: [
+    new AureliaPlugin(),
+    new ProvidePlugin({
+      'Promise': 'bluebird',
+      '$': 'jquery',
+      'jQuery': 'jquery',
+      'window.jQuery': 'jquery',
+    }),
+    new HtmlWebpackPlugin({
+      template: 'index.ejs',
+      minify: production ? {
+        removeComments: true,
+        collapseWhitespace: true
+      } : undefined,
+      metadata: {
+        // available in index.ejs //
+        title, server, baseUrl
+      },
+    }),
+    new CopyWebpackPlugin([
+      { from: 'static/favicon.ico', to: 'favicon.ico' }
+    ]),
+    ...when(extractCss, new ExtractTextPlugin({
+      filename: production ? '[contenthash].css' : '[id].css',
+      allChunks: true,
+    })),
+    ...when(production, new CommonsChunkPlugin({
+      name: 'common'
+    }))
+  ],
+})
